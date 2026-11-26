@@ -1,0 +1,114 @@
+#!/sbin/openrc-run
+# Copyright 2025 Gentoo Authors
+# Distributed under the terms of the GNU General Public License v3
+
+# Boot-time apply of the whole stored configuration (the service name is
+# kept for compatibility). `patronus apply` opens
+# /var/lib/patronus/config.db, seeds the safe default ruleset on first boot
+# ([network] in /etc/patronus/patronus.toml names the WAN/LAN interfaces),
+# then applies sysctl -> interfaces/VLANs -> routes -> firewall/NAT ->
+# services. `patronus firewall apply` is the firewall-only subset.
+
+# OpenRC reads /etc/conf.d/<this service> only; the shared tunables live in /etc/conf.d/patronus
+[ -r /etc/conf.d/patronus ] && . /etc/conf.d/patronus
+
+description="Patronus boot apply (sysctl, interfaces, routes, firewall/NAT, services)"
+extra_started_commands="reload"
+
+depend() {
+	need localmount
+	use dev udev
+	before net
+	provide firewall
+}
+
+# The store is opened by root here (patronus apply) and by the unprivileged
+# patronus-web: whatever root creates or rewrites must stay writable by the
+# patronus user, else the web UI fails with "attempt to write a readonly
+# database" (seen on a first boot where this service created config.db).
+fix_store_perms() {
+	checkpath --directory --owner patronus:patronus --mode 0755 /var/lib/patronus /var/log/patronus
+	for f in /var/lib/patronus/config.db /var/lib/patronus/config.db-wal \
+		/var/lib/patronus/config.db-shm /var/lib/patronus/config.db-journal; do
+		[ -e "$f" ] && chown patronus:patronus "$f" && chmod 0640 "$f"
+	done
+	return 0
+}
+
+start_pre() {
+	fix_store_perms
+}
+
+# Everything `patronus apply` prints at boot goes to ${PATRONUS_BOOT_LOG} (OpenRC shows only "failed to start" on the console and keeps no log of
+# the command's own output: a boot-only failure used to leave no trace at all). Tunables (/etc/conf.d/patronus): PATRONUS_BOOT_TRIES,
+# PATRONUS_BOOT_RETRY_DELAY, PATRONUS_BOOT_LOG.
+boot_log() {
+	echo "${PATRONUS_BOOT_LOG:-/var/log/patronus/boot-apply.log}"
+}
+
+# one line of the log: UTC time, seconds since boot, text
+boot_note() {
+	printf '%s up=%ss %s\n' "$(date -u +%FT%TZ)" "$(cut -d. -f1 /proc/uptime 2>/dev/null)" "$*" >> "$(boot_log)" 2>/dev/null
+}
+
+# what the apply depended on when it failed for good: links, addresses, loaded netfilter modules, the store, the ruleset
+boot_diag() {
+	{
+		echo "---- state after the last failed try"
+		ip -br link 2>&1
+		ip -br addr 2>&1
+		grep -E '^(nf_tables|nft_|nf_conntrack)' /proc/modules 2>&1 | cut -d' ' -f1 | tr '\n' ' '; echo
+		ls -ld /run/patronus /var/lib/patronus /var/lib/patronus/config.db* 2>&1
+		nft list tables 2>&1
+		echo "---- end"
+	} >> "$(boot_log)" 2>&1
+}
+
+start() {
+	local tries="${PATRONUS_BOOT_TRIES:-5}" delay="${PATRONUS_BOOT_RETRY_DELAY:-3}" log try=0 rc=1
+	log=$(boot_log)
+	ebegin "Applying Patronus configuration"
+	checkpath --directory --owner patronus:patronus --mode 0755 "$(dirname "${log}")" 2>/dev/null
+	# This runs before `net`: queue the DHCP/DNS/NTP daemons (which need
+	# net) instead of starting them inline, which would wait on ourselves.
+	# Up to ${tries} tries, ${delay} s apart (NIC not up yet, store recovering after a
+	# power-off): a service left stopped means no forwarding at all.
+	# Forwarding is switched on by the apply itself (sysctl stage) from the
+	# stored config, after the ruleset is in place, so a failed apply stays
+	# fail-closed.
+	while [ "${try}" -lt "${tries}" ]; do
+		try=$((try + 1))
+		boot_note "boot apply try ${try}/${tries}"
+		PATRONUS_DEFER_SERVICES=1 /usr/bin/patronus apply >> "${log}" 2>&1
+		rc=$?
+		if [ "${rc}" = 0 ]; then
+			boot_note "boot apply ok (try ${try})"
+			break
+		fi
+		boot_note "boot apply failed: exit ${rc} (try ${try}/${tries})"
+		[ "${try}" -lt "${tries}" ] && sleep "${delay}"
+	done
+	if [ "${rc}" != 0 ]; then
+		boot_diag
+		logger -t patronus-firewall "boot apply failed after ${try} tries (exit ${rc}); output in ${log}" 2>/dev/null
+	fi
+	fix_store_perms
+	eend "${rc}" "boot apply failed, see ${log}"
+}
+
+stop() {
+	local log rc
+	log=$(boot_log)
+	ebegin "Flushing Patronus firewall rules"
+	boot_note "flush on stop"
+	/usr/bin/patronus firewall flush >> "${log}" 2>&1
+	rc=$?
+	[ "${rc}" = 0 ] || boot_note "flush failed: exit ${rc}"
+	eend "${rc}" "flush failed, see ${log}"
+}
+
+reload() {
+	ebegin "Re-applying Patronus configuration"
+	/usr/bin/patronus apply
+	eend $?
+}

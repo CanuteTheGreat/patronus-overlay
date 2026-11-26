@@ -1,0 +1,34 @@
+#!/sbin/openrc-run
+# Copyright 2026 Gentoo Authors
+# Distributed under the terms of the GNU General Public License v3
+
+# Root apply broker for the web UI (see patronus-applyd.service): lets the
+# unprivileged patronus-web re-apply a subsystem from the config store, e.g.
+# (re)start DHCP clients / pppd after an interface change, or write the
+# DHCP/DNS/NTP daemon configs (/etc/kea, /etc/dnsmasq.conf, /etc/unbound,
+# /etc/chrony) and restart those daemons. Also refreshes dynamic DNS every
+# 5 minutes.
+
+description="Patronus apply broker for the web UI"
+command="/usr/bin/patronus"
+command_args="applyd"
+command_background=true
+pidfile="/run/${RC_SVCNAME}.pid"
+output_log="/var/log/patronus/applyd.log"
+error_log="/var/log/patronus/applyd.log"
+
+depend() {
+	need localmount
+	after firewall patronus-firewall
+	before patronus-web
+}
+
+start_pre() {
+	checkpath --directory --mode 0755 /run/patronus
+	checkpath --directory --owner patronus:patronus --mode 0755 /var/lib/patronus /var/log/patronus
+	# the store may have been created by root (boot apply): keep it writable by patronus-web
+	for f in /var/lib/patronus/config.db /var/lib/patronus/config.db-wal /var/lib/patronus/config.db-shm; do
+		[ -e "$f" ] && chown patronus:patronus "$f"
+	done
+	return 0
+}

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE pkgmetadata SYSTEM "https://www.gentoo.org/dtd/metadata.dtd">
+<pkgmetadata>
+	<maintainer type="person">
+		<email>canutethegreat@errant.solutions</email>
+		<name>CanuteTheGreat</name>
+	</maintainer>
+	<longdescription>
+		Patronus is a modern firewall and network security platform built with Rust on Gentoo Linux.
+		It provides an open-source alternative to pfSense and OPNsense with maximum customization
+		through USE flags and Gentoo's compilation options.
+	</longdescription>
+	<use>
+		<flag name="web">Enable web-based management interface</flag>
+		<flag name="cli">Enable command-line interface</flag>
+		<flag name="api">Enable REST API for automation</flag>
+		<flag name="dashboard">Install patronus-dashboard, the multi-site SD-WAN enterprise dashboard (GraphQL/REST API, 3-node HA leader election + replication)</flag>
+		<flag name="nftables">Use nftables for packet filtering (recommended)</flag>
+		<flag name="iptables">Use legacy iptables for packet filtering</flag>
+		<flag name="dhcp">Enable DHCP server functionality</flag>
+		<flag name="dns">Enable DNS server functionality</flag>
+		<flag name="unbound">Use Unbound as DNS resolver</flag>
+		<flag name="vpn">Enable VPN support</flag>
+		<flag name="wireguard">Enable WireGuard VPN support</flag>
+		<flag name="openvpn">Enable OpenVPN support</flag>
+		<flag name="ipsec">Enable IPsec/strongSwan support</flag>
+		<flag name="monitoring">Enable system and traffic monitoring</flag>
+		<flag name="prometheus">Enable Prometheus metrics export</flag>
+		<flag name="plugins">Signed plugins and optional components (Packages page, patronus plugin)</flag>
+		<flag name="syslog">Forward the system log to remote collectors from the web UI (rsyslog)</flag>
+		<flag name="igmp">IGMP proxy for multicast forwarding (igmpproxy)</flag>
+		<flag name="uci-import">patronus import-uci: one-step migration from an OpenWrt router configuration (sysupgrade backup or the running router over ssh)</flag>
+		<flag name="wifi-client">Wi-Fi client (station) uplink: use a wireless network as WAN or backup WAN through wpa_supplicant</flag>
+		<flag name="mdns">mDNS repeater: Bonjour/AirPlay/printer discovery across LAN segments (avahi-daemon reflector)</flag>
+		<flag name="nat64">NAT64 / DNS64 for IPv6-only clients (tayga + Unbound)</flag>
+		<flag name="l2tp">L2TP server with PPP users (xl2tpd)</flag>
+		<flag name="sdwan">SD-WAN edge agent: join a Patronus SD-WAN overlay (WireGuard mesh, endpoint failover, path reporting)</flag>
+		<flag name="netflow">Export NetFlow / IPFIX flow records from an interface (softflowd)</flag>
+		<flag name="dynamic-routing">BGP and OSPF dynamic routing (FRRouting)</flag>
+		<flag name="captive-portal">Enable captive portal functionality</flag>
+		<flag name="intrusion-detection">Enable IDS/IPS functionality</flag>
+		<flag name="suricata">Use Suricata for intrusion detection</flag>
+		<flag name="vlan">Enable VLAN support</flag>
+		<flag name="qos">Enable Quality of Service (traffic shaping)</flag>
+		<flag name="backup">Enable configuration backup/restore</flag>
+		<flag name="gitops">GitOps: `patronus gitops sync|watch` and the patronus-gitops service apply firewall/NAT/interface/route resources kept in a git repository</flag>
+	</use>
+	<upstream>
+		<bugs-to>https://git.canutethegreat.com/CanuteTheGreat/patronus/issues</bugs-to>
+	</upstream>
+</pkgmetadata>

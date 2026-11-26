@@ -1,0 +1,43 @@
+#!/sbin/openrc-run
+# Copyright 2025 Gentoo Authors
+# Distributed under the terms of the GNU General Public License v3
+
+description="Patronus Web Interface"
+
+# HTTPS on :443 (self-signed until you install a certificate), plain HTTP on :80
+# that only redirects to HTTPS, :8443 kept as an extra HTTPS port. Every port,
+# the listen addresses and the certificate are settings (System page,
+# /api/system/web, /etc/patronus/patronus.toml [web], PATRONUS_* in
+# /etc/conf.d/patronus-web); `patronus-web --help` lists them.
+# The process runs as the unprivileged patronus user: CAP_NET_BIND_SERVICE
+# (ambient) is what lets it bind 80 and 443; CAP_NET_ADMIN/NET_RAW are for nft.
+# Login: a SYSTEM user in patronus-admin or wheel (PAM service "patronus",
+# checked by patronus-applyd as root); no built-in admin account.
+command="/usr/bin/patronus-web"
+# nft needs net_admin/net_raw as the patronus user; ports below 1024 need net_bind_service
+capabilities="^cap_net_admin,^cap_net_raw,^cap_net_bind_service"
+command_background=true
+command_user="${PATRONUS_USER:-patronus}:${PATRONUS_GROUP:-patronus}"
+pidfile="/run/${RC_SVCNAME}.pid"
+
+output_log="/var/log/patronus/web.log"
+error_log="/var/log/patronus/web-error.log"
+
+depend() {
+	need net
+	use dns patronus-applyd
+	after firewall
+}
+
+start_pre() {
+	checkpath --directory --owner ${command_user} --mode 0755 \
+		/var/log/patronus \
+		/var/lib/patronus
+	checkpath --directory --owner ${command_user} --mode 0700 \
+		/etc/patronus/tls
+	# a store created by root (boot apply) would make the first write fail with "readonly database"
+	for f in /var/lib/patronus/config.db /var/lib/patronus/config.db-wal /var/lib/patronus/config.db-shm; do
+		[ -e "$f" ] && chown ${command_user} "$f"
+	done
+	return 0
+}
